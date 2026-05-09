@@ -97,18 +97,19 @@ For detailed setup, see `DEVELOPMENT_SETUP.md`
 
 ## Documentation
 
-• `ARCHITECTURE.md` - Design decisions & trade-offs
-• `DATA_MODELING.md` - Dimensional model explained
-• `DEVELOPMENT_SETUP.md` - Step-by-step setup guide
-• `DBT_PROJECT_SETUP.md` - dbt project structure
-• `AIRFLOW_SETUP.md` - Airflow orchestration
-• `GCP_AUTHENTICATION.md` - Auth without JSON keys
-• `TROUBLESHOOTING.md` - Common issues & solutions
+- `ARCHITECTURE.md` - Design decisions & trade-offs
+- `DATA_MODELING.md` - Dimensional model explained
+- `DEVELOPMENT_SETUP.md` - Step-by-step setup guide
+- `DBT_PROJECT_SETUP.md` - dbt project structure
+- `AIRFLOW_SETUP.md` - Airflow orchestration
+- `GCP_AUTHENTICATION.md` - Auth without JSON keys
+- `TROUBLESHOOTING.md` - Common issues & solutions
 
 ---
 
-## Project Stucture
+## Project Structure
 
+```text
 booking-clickstream-dbt/
 ├── docs/                    # Documentation
 ├── src/data_generator/      # Clickstream generator
@@ -119,6 +120,7 @@ booking-clickstream-dbt/
 ├── .gitignore               # Git ignore rules
 ├── README.md                # This file
 └── CHANGELOG.md             # Version history
+```
 
 ---
 
