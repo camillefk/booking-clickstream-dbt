@@ -24,10 +24,14 @@ This document defines the **dimensional data model** (Star Schema) for the click
 
 ### 2.1 fct_clickstream_events
 
-**Purpose:** Track every user click/interaction with granular detail
-**Grain:** One row per event
-**Volume Estimate:** 1-10M rows (depends on traffic)
-**Materialization:** Table (performance)
+**Purpose:** Track every user click/interaction with granular detail  
+
+**Grain:** One row per event  
+
+**Volume Estimate:** 1-10M rows (depends on traffic)  
+
+**Materialization:** Table (performance)  
+
 
 #### Schema
 
@@ -65,10 +69,14 @@ This document defines the **dimensional data model** (Star Schema) for the click
 
 ### 2.2 fct_user_sessions
 
-**Purpose:** Aggregated user sessions (key for understandind behavior)
-**Grain**: One row per user session
-**Volume Estimate**: 100K-1M rows
-**Materialization:** Table (performance)
+**Purpose:** Aggregated user sessions (key for understandind behavior)  
+
+**Grain**: One row per user session  
+
+**Volume Estimate**: 100K-1M rows  
+
+**Materialization:** Table (performance)  
+
 
 **Why this table?**
 - Analysts want to answer: "What's the average session duration?"
@@ -114,10 +122,14 @@ This document defines the **dimensional data model** (Star Schema) for the click
 
 ### 2.3 fct_purchases
 
-**Purpose:** Completed purchase transactions
-**Grain:** One row per purchase event
-**Volume Estimate:** 10K-100K rows
-**Materialization:** Table (performance)
+**Purpose:** Completed purchase transactions  
+
+**Grain:** One row per purchase event  
+
+**Volume Estimate:** 10K-100K rows  
+
+**Materialization:** Table (performance)  
+
 
 **Why separate table?**
 - Purchases are **most important** metric (revenue!)
@@ -161,3 +173,197 @@ This document defines the **dimensional data model** (Star Schema) for the click
 ---
 
 ## 3. DIMENSION TABLES
+
+### 3.1 dim_users
+
+**Purpose:** User master data (WHO is clicking?)  
+
+**Grain:** One row per user  
+
+**Volume Estimate:** 1K-100K rows  
+
+**Materialization:** Table (performance)  
+
+**Type:** Slowly Changing Dimension Type 1 (SCD1)
+- We **overwrite** user data (no history)
+- Simpler for portfolio, suitable for user attributes tha don't need history  
+
+#### Schema 
+
+| Column Name | Data Type | Nullable | Description | Notes |
+|---|---|---|---|---|
+| **user_id** | INTEGER | ✕ No | Unique user identifier | PK; From raw events |
+| **user_name** | STRING | ✓ Yes | User display name | May be anonymous |
+| **email** | STRING | ✓ Yes | User email | For contact/personalization |
+| **signup_date** | DATE | ✓ Yes | When user registered | For cohort analysis |
+| **country** | STRING | ✓ Yes | User country (from IP) | For geographic analysis |
+| **device_type** | STRING | ✓ Yes | Typical device (mobile, desktop, tablet) | Most common device used |
+| **preferred_language** | STRING | ✓ Yes | User language preference | For localization analysis |
+| **is_active_flag** | INTEGER | ✕ No | Is user currently active? | 0 or 1 |
+| **last_active_date** | DATE | ✓ Yes | Last time user clicked | For churn analysis |
+| **lifetime_sessions** | INTEGER | ✕ No | Total sessions ever | Aggregate metric |
+| **lifetime_purchases** | INTEGER | ✕ No | Total purchases ever | Aggregate metric |
+| **lifetime_revenue** | FLOAT64 | ✕ No | Total $ spent | VIP scoring |
+| **loaded_at** | TIMESTAMP | ✕ No | When record loaded | Audit |
+| **_dbt_valid_from** | TIMESTAMP | ✓ Yes | SCD1 validity start | NULL (not using SCD2) |
+| **_dbt_valid_to** | TIMESTAMP | ✓ Yes | SCD1 validity end | NULL (not using SCD2) |
+
+#### Example Rows
+
+| **user_id** | **user_name** | **signup_date** | **country** | **is_active_flag** | **last_active_date** | **lifetime_revenue** |
+|----|----|----|----|----|----|----|
+| 123 | Cami Focke | 2026-01-15 | DE | 1 | 2026-05-13 | 550.00 |
+| 124 | Jane Smith | 2026-01-27 | NL | 1 | 2026-05-12 | 300.50 |
+| 125 | Bob Wilson | 2026-02-10 | NL | 0 | 2026-03-07 | 50.00 |
+
+#### Key Insights
+
+- **User segmentation**: By country, device, signup cohort  
+- **VIP analysis**: lifetime_revenue > threshold
+- **Churn detection:** is_active_flag = 0 AND last_active_date < 30 days ago 
+- **User quality**: lifetime_sessions, lifetime_purchases
+
+---
+
+### 3.2 dim_pages
+
+**Purpose:** Website pages catalog (WHERE did users click?)  
+
+**Grain:** One row per unique page  
+
+**Volume Estimate:** 50-500 rows  
+
+**Materialization:** Table (fast lookups)  
+
+**Type:** SCD1 (pages rarely change fundamentally)  
+
+
+#### Schema
+
+| Column Name | Data Type | Nullable | Description | Notes |
+|---|---|---|---|---|
+| **page_id** | INTEGER | ✕ No | Unique page identifier | PK; Derived from URL |
+| **page_name** | STRING | ✕ No | Human-readable page name | e.g., "Hotel Details" |
+| **page_url** | STRING | ✓ Yes | Full URL path | For debugging/linking |
+| **page_category** | STRING | ✕ No | Page type/category | Enum: 'search', 'details', 'checkout', 'confirmation', 'homepage' |
+| **page_type** | STRING | ✓ Yes | Technical type | 'static', 'dynamic', 'checkout' |
+| **is_conversion_page_flag** | INTEGER | ✕ No | Does this page lead to purchases? | 1 if checkout/confirmation, 0 otherwise |
+| **is_exit_page_flag** | INTEGER | ✕ No | Users exit from here? | 1 if high exit rate, 0 if transitional |
+| **page_created_date** | DATE | ✓ Yes | When page was created | For product analytics |
+| **page_last_modified_date** | DATE | ✓ Yes | Last significant change | For versioning |
+| **loaded_at** | TIMESTAMP | ✕ No | When loaded | Audit |
+
+#### Example Rows
+
+| page_id |	page_name |	page_category |	is_conversion_page |	page_url |
+|----|----|----|----|----|
+|456 |	Hotel Details |	details |	0 |	/hotels/456 |
+|789 |	Booking Form |	checkout |	1 |	/booking/form |
+|111 |	Search Results |	search |	0 |	/search?city=* |
+|222 |	Confirmation |	confirmation |	1 |	/confirmation |
+
+#### Key Insights
+
+- **Funnel analysis**: Track flow search → details → checkout → confirmation
+- **Page performance**: Which pages have highest click-through rate?
+- **Exit rate**: Where users abandon?
+
+---
+
+### 3.3 dim_products
+
+**Purpose:** Catalog of products/offerings (WHAT was viewed/purchased?)  
+
+**Grain:** One row per unique product  
+
+**Volume Estimate:** 100-10K rows  
+
+**Materialization:** Table  
+
+**Type:** SCD1 (products change, but for simplicity we overwrite)  
+
+
+#### Schema
+
+| Column Name | Data Type | Nullable | Description | Notes |
+|---|---|---|---|---|
+| **product_id** | INTEGER | ✕ No | Unique product identifier | PK |
+| **product_name** | STRING | ✕ No | Product display name | e.g., "5-star Amsterdam Hotel" |
+| **product_type** | STRING | ✕ No | Type of product | Enum: 'hotel', 'flight', 'activity', 'package' |
+| **category** | STRING | ✓ Yes | Business category | e.g., 'accommodations', 'transport' |
+| **subcategory** | STRING | ✓ Yes | More specific category | e.g., 'luxury_hotels', 'economy_flights' |
+| **price** | FLOAT64 | ✕ No | Current price | May change over time (we overwrite) |
+| **currency** | STRING | ✓ Yes | Price currency | Default 'EUR' for European focus |
+| **location** | STRING | ✓ Yes | Geographic location | City/region for filtering |
+| **rating** | FLOAT64 | ✓ Yes | User rating | 0-5 stars (from reviews) |
+| **is_active_flag** | INTEGER | ✕ No | Is product currently available? | 1 if for sale, 0 if discontinued |
+| **loaded_at** | TIMESTAMP | ✕ No | When loaded | Audit |
+
+#### Example Rows
+
+| product_id |	product_name |	product_type |	category |	price |	location |	rating |
+|----|----|----|----|----|----|----|
+|999 |	Hotel Amsterdam XYZ |	hotel |	accommodations |	150.00 |	Amsterdam |	4.5 |
+|1000 |	Flight AMS → FRA |	flight |	transport |	89.99 |	Amsterdam |	4.2 |
+|1001 |	Bike Tour Amsterdam |	activity |	experiences |	25.00 |	Amsterdam |	4.8 |
+
+#### Key Insights
+
+- **Product performance**: Which products drive most revenue?
+- **Price elasticity**: Do higher-priced items sell less?
+- **Category analysis**: Which categories are most popular?
+
+---
+
+### 3.4 dim_date
+
+**Purpose:** Time dimension for temporal analysis  
+
+**Grain:** One row per calendar day  
+
+**Volume Estimate:** ~1000 rows (covers ~2.7 years)  
+
+**Materialization:** Table  
+
+**Note:** This is a **reference/master dimension** - dates are critical for ANY analytics  
+
+
+#### Schema
+
+| Column Name | Data Type | Nullable | Description | Notes |
+|---|---|---|---|---|
+| **date_id** | INTEGER | ✕ No | Date key (YYYYMMDD format) | PK; e.g., 20260506 = May 6, 2026 |
+| **full_date** | DATE | ✕ No | Calendar date | YYYY-MM-DD format |
+| **year** | INTEGER | ✕ No | Year | 2026 |
+| **quarter** | INTEGER | ✕ No | Quarter | 1-4 |
+| **month** | INTEGER | ✕ No | Month | 1-12 |
+| **month_name** | STRING | ✕ No | Month name | 'January', 'February', etc |
+| **week_of_year** | INTEGER | ✕ No | Week number | 1-52 |
+| **day_of_month** | INTEGER | ✕ No | Day of month | 1-31 |
+| **day_of_week** | INTEGER | ✕ No | Day number (1=Mon, 7=Sun) | For weekly patterns |
+| **day_name** | STRING | ✕ No | Day name | 'Monday', 'Tuesday', etc |
+| **is_weekend_flag** | INTEGER | ✕ No | Is Saturday or Sunday? | 1 or 0 |
+| **is_holiday_flag** | INTEGER | ✕ No | Is public holiday? | 1 or 0 (Netherlands) |
+| **is_holiday_name** | STRING | ✓ Yes | Holiday name if applicable | e.g., 'King's Day' |
+| **loaded_at** | TIMESTAMP | ✕ No | When loaded | Audit |
+
+#### Example Rows
+
+| date_id |	full_date |	month |	day_name |	is_weekend |	is_holiday |	is_holiday_name |
+|----|----|----|----|----|----|----|
+| 20260504 |	2026-05-04 |	5 |	Monday |	0 |	0 |	NULL |
+| 20260505 |	2026-05-05 |	5 |	Tuesday |	0 |	0 |	NULL |
+| 20260506 |	2026-05-06 |	5 |	Wednesday |	0 |	0 |	NULL |
+| 20260509 |	2026-05-09 |	5 |	Saturday |	1 |	0 |	NULL |
+| 20260422 |	2026-04-22 |	4 |	Wednesday |	0 |	1 |	King's Day |
+
+#### Key Insights
+
+- **Seasonality**: Compare sales Mon-Fri vs weekends
+- **Holiday impact**: Special promotions on holidays
+- **Monthly/Quarterly trends**: Year-over-year comparison
+- **Cohort analysis**: Users by signup month
+
+---
+
+## 4. Sessionization Logic
