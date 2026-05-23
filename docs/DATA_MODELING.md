@@ -367,3 +367,194 @@ This document defines the **dimensional data model** (Star Schema) for the click
 ---
 
 ## 4. Sessionization Logic
+
+This is **CRITICAL**. Defining a session correctly determines business insights.
+
+### Definition
+
+**Session** - Continuous period of user activity
+- Starts when user lands on site
+- Ends when:
+    - User leaves (browser closes)
+    - **Timeout: 30 minutes of inactivity** ← IMPORTANT!
+    - Session crosses midnight (optional)
+
+### Why 30 Minutes?
+
+Common timeout values:
+- 5 min: Too short (one page view = session) ✕
+- 30 min: **Sweet spot** (typical browsing time) ✓
+- 24 hours: Too long (completely different visits) ✕
+
+### Implementation Logic
+
+```sql
+-- Pseudocode (I'll implement in dbt)
+
+WITH events_with_lag AS (
+  SELECT
+    user_id,
+    event_timestamp,
+    LAG(event_timestamp) OVER (PARTITION BY user_id ORDER BY event_timestamp) as prev_event_ts,
+    
+    -- Calculate gap from previous event
+    TIMESTAMP_DIFF(
+      event_timestamp, 
+      LAG(event_timestamp) OVER (PARTITION BY user_id ORDER BY event_timestamp),
+      MINUTE
+    ) as gap_minutes
+  FROM raw_events
+),
+
+sessions AS (
+  SELECT
+    user_id,
+    event_timestamp,
+    
+    -- Start new session if: gap > 30 minutes OR first event
+    CASE 
+      WHEN gap_minutes IS NULL OR gap_minutes > 30 THEN 1 
+      ELSE 0 
+    END as is_session_start,
+    
+    -- Session ID = user_id + count of session starts
+    CONCAT(
+      user_id, '_',
+      SUM(is_session_start) OVER (PARTITION BY user_id ORDER BY event_timestamp)
+    ) as session_id
+  FROM events_with_lag
+)
+
+SELECT * FROM sessions;
+```
+
+#### Example
+
+```text
+User 123 timeline:
+
+10:30:00 - View hotel page          ← Session s_123_001 starts
+10:31:00 - Click on hotel            
+10:32:00 - Add to cart               
+
+(30 minutes idle...)
+
+11:02:00 - Back on site              ← Session s_123_002 starts (gap > 30 min)
+11:03:00 - Click on different hotel
+11:05:00 - Purchase                  ← End session s_123_002
+
+Result:
+Session s_123_001: 2 events, 2 minutes, no purchase
+Session s_123_002: 3 events, 3 minutes, 1 purchase
+```
+
+## 5. Data Volume Assumptions
+
+An estimate to help with capacity planning and performance tuning.
+
+```text
+TRAFFIC ASSUMPTIONS (per day):
+├── Unique Users: 1,000 → 10,000 (varies by day)
+├── Total Events: 100,000 → 1,000,000
+├── Sessions: 10,000 → 100,000
+├── Purchases: 1,000 → 10,000
+
+TABLE SIZES (after 1 month):
+├── fct_clickstream_events: 3-30M rows (~1-5 GB)
+├── fct_user_sessions: 300K-3M rows (~100-500 MB)
+├── fct_purchases: 30K-300K rows (~10-50 MB)
+├── dim_users: 10K-100K rows (~10-50 MB)
+├── dim_pages: 50-500 rows (~50 KB)
+├── dim_products: 100-10K rows (~1-10 MB)
+└── dim_date: ~1000 rows (~100 KB)
+
+TOTAL: ~5-10 GB after 1 month
+COST: BigQuery free tier allows ~1 TB/month queries → NO CHARGE for portfolio ✓
+```
+
+## 6. Mermaid Diagram
+
+```mermaid
+erDiagram
+    DIM_USERS ||--o{ FCT_CLICKSTREAM_EVENTS : "user_id"
+    DIM_USERS ||--o{ FCT_USER_SESSIONS : "user_id"
+    DIM_USERS ||--o{ FCT_PURCHASES : "user_id"
+    
+    DIM_PAGES ||--o{ FCT_CLICKSTREAM_EVENTS : "page_id"
+    DIM_PAGES ||--o{ FCT_USER_SESSIONS : "page_id"
+    
+    DIM_PRODUCTS ||--o{ FCT_CLICKSTREAM_EVENTS : "product_id"
+    DIM_PRODUCTS ||--o{ FCT_USER_SESSIONS : "product_id"
+    DIM_PRODUCTS ||--o{ FCT_PURCHASES : "product_id"
+    
+    DIM_DATE ||--o{ FCT_CLICKSTREAM_EVENTS : "date_id"
+    DIM_DATE ||--o{ FCT_USER_SESSIONS : "date_id"
+    DIM_DATE ||--o{ FCT_PURCHASES : "date_id"
+    
+    FCT_USER_SESSIONS ||--o{ FCT_CLICKSTREAM_EVENTS : "session_id"
+    
+    DIM_USERS {
+        int user_id PK
+        string user_name
+        string email
+        date signup_date
+        string country
+    }
+    
+    DIM_PAGES {
+        int page_id PK
+        string page_name
+        string page_url
+        string page_category
+    }
+    
+    DIM_PRODUCTS {
+        int product_id PK
+        string product_name
+        float price
+        string category
+    }
+    
+    DIM_DATE {
+        int date_id PK
+        date full_date
+        int year
+        int month
+        string day_name
+    }
+    
+    FCT_CLICKSTREAM_EVENTS {
+        string event_id PK
+        int user_id FK
+        string session_id FK
+        int page_id FK
+        int product_id FK
+        int date_id FK
+        timestamp event_timestamp
+        string event_type
+        float event_value
+    }
+    
+    FCT_USER_SESSIONS {
+        string session_id PK
+        int user_id FK
+        int date_id FK
+        timestamp session_start_ts
+        timestamp session_end_ts
+        int pages_visited
+        int purchases_in_session
+    }
+    
+    FCT_PURCHASES {
+        string purchase_id PK
+        int user_id FK
+        int product_id FK
+        int date_id FK
+        int quantity
+        float final_amount
+    }
+```
+
+---
+
+**Last Updated:** 2026-05-23 
