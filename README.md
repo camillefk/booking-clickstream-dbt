@@ -50,13 +50,9 @@ Raw Events (JSON) -> GCS (Data Lake) -> BigQuery (Raw Layer) -> dbt (Transformat
 ```bash
 git clone https://github.com/camillefk/booking-clickstream-dbt.git
 cd booking-clickstream-dbt
-
-# Create your local `.env` file from the template
-cp config/environment_template.md .env
-
-# Open `.env` and fill in your GCP project details
-nano .env
 ```
+
+Create your `.env` file based on the `.env.example` file and update it with YOUR own values.
 
 2. **Create GCP infrastructure:**
 ```bash
