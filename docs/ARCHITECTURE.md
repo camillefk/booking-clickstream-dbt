@@ -4,7 +4,7 @@
 
 **Goal:** Build an end-to-end ELT pipeline that transforms raw clickstream events into a dimensional data model ready for business analytics.
 
-**Scope:** Simulation of e-commerce/travel website click tracking ans user journey analysis.
+**Scope:** Simulation of e-commerce/travel website click tracking and user journey analysis.
 
 ---
 
@@ -142,4 +142,4 @@ This architecture is designed to:
 
 ---
 
-**Last Updated:** 2026/05/10
+**Last Updated:** 2026/06/11
