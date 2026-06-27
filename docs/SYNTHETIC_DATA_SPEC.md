@@ -113,7 +113,7 @@ A realistic, complete example. Remove comments when generating NDJSON.
 - Format: NDJSON (newline-delimited JSON), 1 JSON object per line.
 - Rationale: streaming-friendly and BigQuery-compatible.
 - Compression: optionally gzip (.ndjson.gz) - BigQuery accepts gzipped NDJSON.
-- GCS layout (recommended): gs://{bucke}/raw/clickstream/YYYY-MM-DD/part-000.ndjson
+- GCS layout (recommended): gs://{bucket}/raw/clickstream/YYYY-MM-DD/part-000.ndjson
 - Rationale: date prefixes simplify daily ingestion and partitioning in BigQuery.
 
 ---
