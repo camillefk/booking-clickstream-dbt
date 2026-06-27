@@ -153,7 +153,7 @@ Rationale: prevents bad data from silently breaking downstream transformations.
 
 ## 8. NDJSON single-line example
 
-{"event_id":"b6d9f7c2-3a2e-4f7b-9ef5-1a2b3c4d5e6f","event_timestamp":"2026-06-22T12:34:56.789Z","user_id":"user_12345","session_id":"sess_98765","event_type":"purchase","page_url":"https://www.example.com/checkout","referrer":"https://www.google.com/","element_id":null,"product_id":"prod_54321","price":79.99,"currency":"EUR","user_agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)...","ip_address":"203.0.113.45","geo":{"country":"NL","region":"North Holland","city":"Amsterdam"},"properties":{"coupon":"SUMMER21","payment_method":"card"}}
+{"event_id":"b6d9f7c2-3a2e-4f7b-9ef5-1a2b3c4d5e6f","event_timestamp":"2026-06-26T12:34:56.789Z","user_id":"user_12345","session_id":"sess_98765","event_type":"purchase","page_url":"https://www.example.com/checkout","referrer":"https://www.google.com/","element_id":null,"product_id":"prod_54321","price":79.99,"currency":"EUR","user_agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)...","ip_address":"203.0.113.45","geo":{"country":"NL","region":"North Holland","city":"Amsterdam"},"properties":{"coupon":"SUMMER21","payment_method":"card"}}
 
 ---
 
