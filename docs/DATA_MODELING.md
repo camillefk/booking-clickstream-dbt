@@ -69,7 +69,7 @@ This document defines the **dimensional data model** (Star Schema) for the click
 
 ### 2.2 fct_user_sessions
 
-**Purpose:** Aggregated user sessions (key for understandind behavior)  
+**Purpose:** Aggregated user sessions (key for understanding behavior)  
 
 **Grain**: One row per user session  
 
@@ -186,7 +186,7 @@ This document defines the **dimensional data model** (Star Schema) for the click
 
 **Type:** Slowly Changing Dimension Type 1 (SCD1)
 - We **overwrite** user data (no history)
-- Simpler for portfolio, suitable for user attributes tha don't need history  
+- Simpler for portfolio, suitable for user attributes that don't need history  
 
 #### Schema 
 
@@ -255,7 +255,7 @@ This document defines the **dimensional data model** (Star Schema) for the click
 
 #### Example Rows
 
-| page_id |	page_name |	page_category |	is_conversion_page |	page_url |
+| page_id |	page_name |	page_category |	is_conversion_page_flag |	page_url |
 |----|----|----|----|----|
 |456 |	Hotel Details |	details |	0 |	/hotels/456 |
 |789 |	Booking Form |	checkout |	1 |	/booking/form |
@@ -444,7 +444,7 @@ User 123 timeline:
 11:05:00 - Purchase                  ← End session s_123_002
 
 Result:
-Session s_123_001: 2 events, 2 minutes, no purchase
+Session s_123_001: 3 events, 2 minutes, no purchase
 Session s_123_002: 3 events, 3 minutes, 1 purchase
 ```
 
@@ -484,7 +484,6 @@ erDiagram
     DIM_PAGES ||--o{ FCT_USER_SESSIONS : "page_id"
     
     DIM_PRODUCTS ||--o{ FCT_CLICKSTREAM_EVENTS : "product_id"
-    DIM_PRODUCTS ||--o{ FCT_USER_SESSIONS : "product_id"
     DIM_PRODUCTS ||--o{ FCT_PURCHASES : "product_id"
     
     DIM_DATE ||--o{ FCT_CLICKSTREAM_EVENTS : "date_id"
@@ -557,4 +556,4 @@ erDiagram
 
 ---
 
-**Last Updated:** 2026-05-23 
+**Last Updated:** 2026-06-28 
