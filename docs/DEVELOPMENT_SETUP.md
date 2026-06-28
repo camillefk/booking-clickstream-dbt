@@ -65,7 +65,7 @@ cd booking-clickstream-dbt
 # Login to Google Cloud (opens browser)
 gcloud auth application-default login
 
-# Set your GCP project (replaces with YOUR sandbox project)
+# Set your GCP project (replace with YOUR sandbox project)
 gcloud config set project YOUR_SANDBOX_PROJECT_ID
 
 # Verify
@@ -315,7 +315,7 @@ models:
 ### Initialize Airflow
 
 ```bash
-# Create airflow home (if not exists)
+# Create airflow home (if it doesn't exist)
 mkdir -p ~/airflow
 
 # Set Airflow home
@@ -343,7 +343,7 @@ airflow users create \
 airflow scheduler
 
 # In another terminal, start webserver
-airflow webui
+airflow webserver
 
 # Access at http://localhost:8080
 # Login: admin / admin
