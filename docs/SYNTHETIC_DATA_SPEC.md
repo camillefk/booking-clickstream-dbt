@@ -1,40 +1,42 @@
-# Synthetic Data Specification - Clickstream
+# Synthetic Data Specification - Clickstream (aligned with DATA_MODELING.md)
 
-This document defines the clickstream event JSON schema used by the project, a realistic example event, recommended daily volumes for local testing, and the default event distribution (70% navigation, 20% click, 10% purchase). Short rationales are included so you understand why each field and choice exists.
+This specification documents the JSON schema used by the synthetic generator and the fields expected by the data model (fct_clickstream_events). It defines types, required fields, timestamp formats, an example event, recommended volumes and distribution, and validation guindance.
 
 ---
 
 ## Goal
 
-Provide a stable, well-documented schema for the synthetic data generator and any producers so that raw data landing in GCS and later processed by dbt is consistent and predictable.
+Make raw clickstream events consistent with the dimensional model so ingestion, dbt transformations and analytics run without surprises.
 
 Why this matters:
-- Enables automated tests and schema validations.
-- Makes dbt transformations predictable and easier to debug.
-- Helps ensure analytics and dashboards consume a known shape.
+- Aligns generator output with BigQuery table schema.
+- Avoids schema drift between raw → staging → analytics.
+- Ensures reproducible tests and predictable dbt models.
 
 ---
 
 ## 1. Clickstream event JSON (field descriptions)
 
-Each event is a JSON object. Fields marked (required) are essential for ordering and identification; optional fields enrich events.
+Each event is a JSON object. Fields marked (required) are mandatory for ingestion and modelling.
 
-- event_id (string, required) — UUID v4 for the event. Rationale: guarantees uniqueness and traceability.
-- event_timestamp (string, required) — ISO 8601 UTC timestamp (e.g. "2026-06-22T12:34:56.789Z"). Rationale: ordering and time-window analysis.
-- user_id (string|null, required) — user identifier; can be null for anonymous visitors. Rationale: user-level analysis.
-- session_id (string, required) — groups events into a browsing session. Rationale: sessionization.
-- event_type (string, required) — event category. Allowed: "navigation", "click", "purchase". Rationale: simple actionable categories for modeling.
-- page_url (string, required) — page URL where the event happened. Rationale: page context.
-- referrer (string|null, optional) — referrer URL (acquisition/source).
-- element_id (string|null, optional) — id of clicked element (when applicable).
-- product_id (string|null, optional) — product identifier for purchase/add-to-cart events.
-- price (number|null, optional) — transaction amount for purchases.
-- currency (string|null, optional) — ISO currency code (e.g. "USD", "EUR").
-- user_agent (string, optional) — browser/device user agent (useful for device analysis).
-- ip_address (string|null, optional) — IP address (mask or omit in production for privacy).
-- geo (object, optional) — { country: string, region: string, city: string } for simpler geo-aggregation.
-- properties (object, optional) — free-form map for custom attributes (e.g. {"button_color":"red"}).
+- event_id (string, required) — Unique event identifier (e.g. "evt_...").  Rationale: primary key for the event row.
+- event_timestamp (string, required) — ISO 8601 UTC timestamp with milliseconds and trailing Z (example: "2026-05-11T10:30:45.123Z").  Rationale: unambiguous time for BigQuery TIMESTAMP.
+- user_id (integer|null, required) — Numeric user identifier (FK to dim_users). Null for anonymous visitors.  Rationale: user-level joins and aggregates.
+- session_id (string, required) — Session identifier (e.g. "s_123_abc123").  Rationale: sessionization and session-level facts.
+- page_id (integer, required) — Numeric page identifier (FK to dim_pages).  Rationale: matches dimensional model and makes joins efficient.
+- product_id (integer|null, optional) — Product identifier (FK to dim_products). Present for click/add_to_cart/purchase events.
+- date_id (integer, required) — Partition/date key in YYYYMMDD (e.g. 20260511).  Rationale: date dimension FK and partitioning.
+- event_type (string, required) — Allowed values: "pageview", "click", "add_to_cart", "purchase".  Rationale: consistent categories for modeling and funnels.
+- event_value (number|null, optional) — Numeric value (e.g. price). Present for purchase events (FLOAT).
+- user_agent (string|null, optional) — Browser / device string.
+- referrer_url (string|null, optional) — Referrer URL or null.
+- ip_address (string|null, optional) — IP (mask or omit in production).
+- loaded_at (string, required) — ISO 8601 UTC timestamp when the record was created/loaded (audit).
+- geo (object, optional) — { country: string, region: string, city: string }.
+- properties (object, optional) — Free-form attributes (e.g. {"coupon":"SUMMER21"}).
 
+Notes:
+- "pageview" corresponds to previous "navigation" terminology.
 ---
 
 ## 2. JSON Schema (use for generator validation)
@@ -45,20 +47,20 @@ Validate records before upload using this schema to avoid malformed records ente
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
-  "required": ["event_id", "event_timestamp", "user_id", "session_id", "event_type", "page_url"],
+  "required": ["event_id", "event_timestamp", "user_id", "session_id", "page_id", "date_id", "event_type", "loaded_at"],
   "properties": {
     "event_id": {"type": "string"},
     "event_timestamp": {"type": "string", "format": "date-time"},
-    "user_id": {"type": ["string", "null"]},
+    "loaded_at": {"type": "string", "format": "date-time"},
+    "user_id": {"type": ["integer", "null"]},
     "session_id": {"type": "string"},
-    "event_type": {"type": "string", "enum": ["navigation", "click", "purchase"]},
-    "page_url": {"type": "string"},
-    "referrer": {"type": ["string", "null"]},
-    "element_id": {"type": ["string", "null"]},
-    "product_id": {"type": ["string", "null"]},
-    "price": {"type": ["number", "null"]},
-    "currency": {"type": ["string", "null"]},
-    "user_agent": {"type": "string"},
+    "page_id": {"type": "integer"},
+    "product_id": {"type": ["integer", "null"]},
+    "date_id": {"type": "integer"},
+    "event_type": {"type": "string", "enum": ["pageview", "click", "add_to_cart", "purchase"]},
+    "event_value": {"type": ["number", "null"]},
+    "user_agent": {"type": ["string", "null"]},
+    "referrer_url": {"type": ["string", "null"]},
     "ip_address": {"type": ["string", "null"]},
     "geo": {
       "type": "object",
@@ -76,30 +78,30 @@ Validate records before upload using this schema to avoid malformed records ente
 ```
 
 Rationale:
-- required fields enforce a minimum viable event.
+- required fields match the dimensional model.
 - enum restricts event_type to expected categories.
-- additionalProperties=false reduces accidental fields.
+- event_timestamp and loaded_at use ISO 8601 "date-time" strings suitable for BigQuery TIMESTAMP conversion.
 
 ---
 
 ## 3. Example event (full JSON)
 
-A realistic, complete example. Remove comments when generating NDJSON.
+A realistic, complete example.
 
 ```json
 {
-  "event_id": "b6d9f7c2-3a2e-4f7b-9ef5-1a2b3c4d5e6f",
-  "event_timestamp": "2026-06-26T12:34:56.789Z",
-  "user_id": "user_12345",
-  "session_id": "sess_98765",
+  "event_id": "evt_b6d9f7c2",
+  "event_timestamp": "2026-05-11T10:30:45.123Z",
+  "loaded_at": "2026-05-11T10:31:00.456Z",
+  "user_id": 123,
+  "session_id": "s_123_abc123",
+  "page_id": 456,
+  "product_id": 999,
+  "date_id": 20260511,
   "event_type": "purchase",
-  "page_url": "https://www.example.com/checkout",
-  "referrer": "https://www.google.com/",
-  "element_id": null,
-  "product_id": "prod_54321",
-  "price": 79.99,
-  "currency": "EUR",
+  "event_value": 150.00,
   "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)...",
+  "referrer_url": "https://www.google.com/",
   "ip_address": "203.0.113.45",
   "geo": {"country": "NL", "region": "North Holland", "city": "Amsterdam"},
   "properties": {"coupon": "SUMMER21", "payment_method": "card"}
@@ -111,10 +113,9 @@ A realistic, complete example. Remove comments when generating NDJSON.
 ## 4. File format & partitioning
 
 - Format: NDJSON (newline-delimited JSON), 1 JSON object per line.
-- Rationale: streaming-friendly and BigQuery-compatible.
 - Compression: optionally gzip (.ndjson.gz) - BigQuery accepts gzipped NDJSON.
-- GCS layout (recommended): gs://{bucket}/raw/clickstream/YYYY-MM-DD/part-000.ndjson
-- Rationale: date prefixes simplify daily ingestion and partitioning in BigQuery.
+- GCS layout: gs://{bucket}/raw/clickstream/YYYY-MM-DD/events_batch_001.ndjson
+- Partitioning: load to partitioned BigQuery tables by date_id or use ingestion-time partitioning. Prefer date_id partitioning for reproducibility.
 
 ---
 
@@ -131,14 +132,13 @@ Use smaller profiles for development to save quota and get faster feedback; medi
 
 ## 6. Generation rules & sessionization
 
-- Timestamps: generate in UTC; distribute events across the day (uniform or simple time-of-day pattern).
+- Timestamps: generate in UTC ISO 8601 with millisecond precision and trailing Z.
 - session_id groups events per user. Default session timeout: 30 minutes of inactivity (configurable).
-- IDs: event_id and session_id should be UUIDv4. user_id can be "user_N" or UUIDs.
+- IDs: user_id, page_id, product_id integers; event_id string UUID or prefixed id.
 - Conditional fields:
-  - product_id, price, currency only when event_type == "purchase".
-  - element_id normally present for event_type == "click".
-- Edge cases: optionally generate a small percent (e.g., 0.5%) of nulls or malformed values to test pipeline robustness — log and isolate them to an errors prefix.
-
+  - product_id and event_value populated for add_to_cart/purchase events.
+  - event_value is numeric for purchases (total_amount or final amount).
+- Small fraction of intentionally invalid or null fields may be generated for robustness tests; these should be routed to an errors prefix.
 ---
 
 ## 7. Validation & error handling
@@ -153,7 +153,7 @@ Rationale: prevents bad data from silently breaking downstream transformations.
 
 ## 8. NDJSON single-line example
 
-{"event_id":"b6d9f7c2-3a2e-4f7b-9ef5-1a2b3c4d5e6f","event_timestamp":"2026-06-26T12:34:56.789Z","user_id":"user_12345","session_id":"sess_98765","event_type":"purchase","page_url":"https://www.example.com/checkout","referrer":"https://www.google.com/","element_id":null,"product_id":"prod_54321","price":79.99,"currency":"EUR","user_agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)...","ip_address":"203.0.113.45","geo":{"country":"NL","region":"North Holland","city":"Amsterdam"},"properties":{"coupon":"SUMMER21","payment_method":"card"}}
+{"event_id":"evt_b6d9f7c2","event_timestamp":"2026-05-11T10:30:45.123Z","loaded_at":"2026-05-11T10:31:00.456Z","user_id":123,"session_id":"s_123_abc123","page_id":456,"product_id":999,"date_id":20260511,"event_type":"purchase","event_value":150.00,"user_agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)...","referrer_url":"https://www.google.com/","ip_address":"203.0.113.45","geo":{"country":"NL","region":"North Holland","city":"Amsterdam"},"properties":{"coupon":"SUMMER21","payment_method":"card"}}
 
 ---
 
@@ -165,4 +165,4 @@ Rationale: prevents bad data from silently breaking downstream transformations.
 
 ---
 
-Last updated: 2026-06-26
+Last updated: 2026-07-11

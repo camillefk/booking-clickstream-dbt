@@ -1,6 +1,6 @@
 import random
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Iterator, Dict, Any, Optional
 from faker import Faker
 
@@ -69,9 +69,9 @@ class ClickstreamGenerator:
     ) -> Dict[str, Any]:
 
         # Formating dates according to the target table constraints
-        event_timestamp_str = event_ts.strftime("%Y-%m-%d %H:%M:%S")
+        event_timestamp_str = event_ts.isoformat(timespec="milliseconds") + "Z"
         date_id = int(event_ts.strftime("%Y%m%d"))
-        loaded_at_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        loaded_at_str = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
 
         event = {
             "event_id": f"evt_{uuid.uuid4().hex[:8]}",
@@ -99,7 +99,7 @@ class ClickstreamGenerator:
 
     def generate(self, num_events: int, start_date: Optional[datetime] = None) -> Iterator[Dict[str, Any]]:
         if start_date is None:
-            start_date = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+            start_date = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
 
         events_emitted = 0
         while events_emitted < num_events:
